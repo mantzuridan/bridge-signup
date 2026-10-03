@@ -434,3 +434,80 @@ create or replace function public._norm(p text) returns text
 language sql immutable set search_path = public as $$
   select nullif(regexp_replace(btrim(regexp_replace(coalesce(p, ''), '[‎‏‪-‮⁦-⁩]', '', 'g')), '\s+', ' ', 'g'), '')
 $$;
+
+-- ---------- migration: table opener can cancel players / the whole table; admin can remove a table ----------
+alter table public.groups add column owner_token_hash text;
+
+create or replace function public._token_hash(p_token text) returns text
+language sql immutable set search_path = public, extensions as $$
+  select encode(extensions.digest(coalesce(p_token, ''), 'sha256'), 'hex')
+$$;
+
+drop function public.open_table(text[]);
+create function public.open_table(p_names text[]) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  gid uuid := public._open_group('table', p_names, true);
+  tok text := gen_random_uuid()::text;
+begin
+  update public.groups set owner_token_hash = public._token_hash(tok) where id = gid;
+  return json_build_object('group_id', gid, 'token', tok);
+end $$;
+
+create or replace function public._owned_group(p_group uuid, p_token text) returns public.groups
+language plpgsql stable security definer set search_path = public as $$
+declare
+  g public.groups;
+begin
+  select * into g from public.groups
+   where id = p_group and kind = 'table'
+     and owner_token_hash = public._token_hash(p_token)
+     and session_date = public._current_session();
+  if not found then raise exception 'table_not_found'; end if;
+  return g;
+end $$;
+
+create or replace function public._groups_json_one(p_group uuid) returns json
+language sql stable security definer set search_path = public as $$
+  select coalesce(json_agg(json_build_object('id', p.id, 'name', p.name) order by p.created_at, p.name), '[]'::json)
+    from public.players p where p.group_id = p_group
+$$;
+
+create or replace function public.my_table(p_group uuid, p_token text) returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  perform public._owned_group(p_group, p_token);
+  return json_build_object('players', public._groups_json_one(p_group));
+exception when others then
+  return null;
+end $$;
+
+create or replace function public.owner_remove_player(p_group uuid, p_token text, p_player uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public._owned_group(p_group, p_token);
+  if not exists (select 1 from public.players where id = p_player and group_id = p_group) then
+    raise exception 'player_not_found';
+  end if;
+  perform public._remove(p_player, false);
+end $$;
+
+create or replace function public.owner_remove_table(p_group uuid, p_token text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public._owned_group(p_group, p_token);
+  delete from public.groups where id = p_group;
+end $$;
+
+create or replace function public.admin_remove_table(p_code text, p_group uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public._check_code(p_code);
+  delete from public.groups where id = p_group and kind = 'table';
+end $$;
+
+revoke execute on function public._token_hash(text), public._owned_group(uuid, text), public._groups_json_one(uuid) from public, anon, authenticated;
+revoke execute on function public.open_table(text[]), public.my_table(uuid, text), public.owner_remove_player(uuid, text, uuid),
+  public.owner_remove_table(uuid, text), public.admin_remove_table(text, uuid) from public;
+grant execute on function public.open_table(text[]), public.my_table(uuid, text), public.owner_remove_player(uuid, text, uuid),
+  public.owner_remove_table(uuid, text), public.admin_remove_table(text, uuid) to anon, authenticated;

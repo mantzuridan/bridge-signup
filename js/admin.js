@@ -126,8 +126,12 @@ async function copySummary(snapshot) {
 // ---------- actions ----------
 
 function removePlayer(p) {
-  confirmDialog({ title: `להסיר את ${p.name}?`, lead: `דיברת עם ${p.name} לפני ההסרה?`, confirmText: "כן, להסיר", danger: true })
-    .then((ok) => ok && act(() => adm("admin_remove_player", { p_player: p.id }), `${p.name} הוסר/ה.`));
+  act(() => adm("admin_remove_player", { p_player: p.id }), `${p.name} הוסר/ה.`);
+}
+
+function removeTable(t) {
+  confirmDialog({ title: `להסיר את שולחן ${t.number}?`, lead: t.players.map((p) => p.name).join(", "), confirmText: "כן, להסיר את השולחן", danger: true })
+    .then((ok) => ok && act(() => adm("admin_remove_table", { p_group: t.id }), `שולחן ${t.number} הוסר.`));
 }
 
 function moveSelect(p, tables, currentId, placeholder) {
@@ -193,7 +197,8 @@ function render() {
       missing ? h("button", { class: "btn small", onclick: () => joinDialog({
         ...dialogOpts(), table: t, firstLabel: "שם השחקן",
         onSubmit: async (names) => { await adm("admin_join_table", { p_group: t.id, p_names: names }); toast(`נוסף לשולחן ${t.number}.`); await refresh(); },
-      }) }, "הוספת שחקן לשולחן") : null);
+      }) }, "הוספת שחקן לשולחן") : null,
+      h("button", { class: "linkbtn", style: "color:var(--red);display:block;margin:6px auto 0", onclick: () => removeTable(t) }, "הסרת השולחן כולו"));
   });
 
   const waitingCard = waiting.length

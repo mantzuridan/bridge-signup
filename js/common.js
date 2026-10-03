@@ -74,7 +74,7 @@ function shortDate(dateStr) {
 }
 
 function normName(s) {
-  return (s || "").replace(/\s+/g, " ").trim();
+  return (s || "").replace(/[‎‏‪-‮⁦-⁩]/g, "").replace(/\s+/g, " ").trim();
 }
 
 function searchKey(s) {
@@ -286,7 +286,7 @@ function openTableDialog(opts) {
     const missing = seats.filter((s) => s.missing.checked).length;
     note.className = "fnote " + (missing ? "missing" : "full");
     note.textContent = missing
-      ? `השולחן יופיע כ"${missing === 1 ? "חסר 1" : `חסרים ${missing}`}", ואחרים יוכלו להצטרף אליו.`
+      ? `${missing === 1 ? "חסר שחקן אחד" : `חסרים ${missing} שחקנים`}. המנהלים ישלימו את השולחן.`
       : "שולחן מלא, 4 שחקנים.";
   }
 
@@ -318,7 +318,13 @@ function openTableDialog(opts) {
     if (i > 0 && opts.prefill && opts.prefill.length && !pre) setMissing(true);
   }
 
-  const form = h("form", { novalidate: true }, h("h3", {}, opts.title), seats.map((s) => s.el), note, errBox, btn,
+  const save = h("input", { type: "checkbox" });
+  const saveLabel = opts.saveOption
+    ? h("label", { class: "check save" }, save, "לשמור כשולחן קבוע (בפעם הבאה אפשר יהיה להירשם בלחיצה)")
+    : null;
+  save.addEventListener("change", () => saveLabel.classList.toggle("on", save.checked));
+
+  const form = h("form", { novalidate: true }, h("h3", {}, opts.title), seats.map((s) => s.el), note, saveLabel, errBox, btn,
     h("button", { class: "btn plain", type: "button", onclick: () => close() }, "ביטול"));
   form.addEventListener("input", () => { errBox.textContent = ""; });
   form.addEventListener("change", () => { errBox.textContent = ""; });
@@ -344,7 +350,7 @@ function openTableDialog(opts) {
       else names.push(v);
     });
     if (!ok) { errBox.textContent = "יש לתקן את השדות המסומנים."; return; }
-    const done = await runSubmit(btn, errBox, () => opts.onSubmit(names));
+    const done = await runSubmit(btn, errBox, () => opts.onSubmit(names, save.checked));
     if (done) close();
   });
 
@@ -426,13 +432,8 @@ function waitingDialog(opts) {
 
 // ---------- live updates ----------
 
+// Registrations are private (no realtime feed), so the admin page polls.
 function subscribeChanges(onChange) {
-  let timer;
-  const fire = () => { clearTimeout(timer); timer = setTimeout(onChange, 400); };
-  sb.channel("signup-changes")
-    .on("postgres_changes", { event: "*", schema: "public", table: "players" }, fire)
-    .on("postgres_changes", { event: "*", schema: "public", table: "groups" }, fire)
-    .subscribe();
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) fire(); });
-  setInterval(() => { if (!document.hidden) onChange(); }, 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) onChange(); });
+  setInterval(() => { if (!document.hidden) onChange(); }, 20000);
 }

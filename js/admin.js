@@ -81,7 +81,7 @@ app.addEventListener("focusout", () => setTimeout(() => {
 
 async function refresh(force) {
   try {
-    [state, known, pastSessions] = await Promise.all([rpc("get_state"), loadKnownNames(), adm("admin_sessions")]);
+    [state, known, pastSessions] = await Promise.all([adm("admin_state"), loadKnownNames(), adm("admin_sessions")]);
     if (!force && typing()) renderPending = true;
     else render();
   } catch (e) {

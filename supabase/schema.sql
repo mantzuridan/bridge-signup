@@ -407,3 +407,30 @@ end $$;
 
 revoke execute on function public._groups_json(date) from public, anon, authenticated;
 grant execute on function public.admin_sessions(text), public.admin_session_groups(text, date) to anon, authenticated;
+
+-- ---------- migration: participants only submit; registrations visible to admins only ----------
+create or replace function public.get_session() returns json
+language sql stable security definer set search_path = public as $$
+  select json_build_object('session_date', public._current_session(),
+                           'is_open', now() < public._deadline(public._current_session()))
+$$;
+
+create or replace function public.admin_state(p_code text) returns json
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public._check_code(p_code);
+  return public.get_state();
+end $$;
+
+drop policy if exists "read groups" on public.groups;
+drop policy if exists "read players" on public.players;
+alter publication supabase_realtime drop table public.groups, public.players;
+
+revoke execute on function public.get_state(), public.join_table(uuid, text[]), public.remove_player(uuid) from anon, authenticated;
+grant execute on function public.get_session(), public.admin_state(text) to anon, authenticated;
+
+-- ---------- migration: strip invisible direction marks from names ----------
+create or replace function public._norm(p text) returns text
+language sql immutable set search_path = public as $$
+  select nullif(regexp_replace(btrim(regexp_replace(coalesce(p, ''), '[‎‏‪-‮⁦-⁩]', '', 'g')), '\s+', ' ', 'g'), '')
+$$;

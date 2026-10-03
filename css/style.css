@@ -285,3 +285,12 @@ footer.foot { text-align: center; margin-top: 30px; color: var(--muted); font-si
 @media (min-width: 560px) {
   .metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+.check.save { margin-top: 14px; padding: 12px; line-height: 1.4; font-size: .95rem; }
+.check.save input { accent-color: var(--green); flex: none; }
+.check.save.on { border-color: var(--green); background: var(--green-soft); color: var(--green-dark); }
+
+.done-list { list-style: none; padding: 0; margin: 10px 0 0; }
+.done-list li { padding: 6px 0; border-top: 1px solid #eee9de; font-size: 1.05rem; }
+.done-list li:first-child { border-top: none; }
+.done-list li.empty { color: var(--muted); font-style: italic; }
